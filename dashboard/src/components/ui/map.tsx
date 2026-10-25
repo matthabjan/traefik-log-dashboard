@@ -541,6 +541,7 @@ function MapMarker({
     return (
         <LeafletMarker
             icon={L.divIcon({
+                className: "", // Skip Leaflet's default white .leaflet-div-icon box
                 html: renderToString(icon),
                 iconAnchor,
                 ...(bgPos ? { bgPos } : {}),
@@ -574,6 +575,7 @@ function MapMarkerClusterGroup({
               const markerCount = cluster.getChildCount()
               const iconNode = icon(markerCount)
               return L.divIcon({
+                  className: "", // Skip Leaflet's default white .leaflet-div-icon box
                   html: renderToString(iconNode),
               })
           }
