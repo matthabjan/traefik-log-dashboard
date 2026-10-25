@@ -30,16 +30,12 @@ export function isPrivateIP(ip: string): boolean {
     return true;
   }
   
-  // IPv6 private/local addresses
-  if (
-    ip === '::1' ||
-    ip.startsWith('fe80:') ||
-    ip.startsWith('fc00:') ||
-    ip.startsWith('fd00:')
-  ) {
-    return true;
+  // IPv6 loopback, unspecified, unique local (fc00::/7) and link-local (fe80::/10)
+  if (ip.includes(':')) {
+    const lower = ip.toLowerCase();
+    return lower === '::1' || lower === '::' || /^f[cd][0-9a-f]{2}:/.test(lower) || /^fe[89ab][0-9a-f]:/.test(lower);
   }
-  
+
   return false;
 }
 
@@ -52,8 +48,10 @@ export function matchesIPRange(ip: string, range: string): boolean {
   // Exact match
   if (ip === range) return true;
 
-  // CIDR match (IPv4 only)
+  // CIDR match (IPv4 only; IPv6 addresses never match a CIDR range)
   if (range.includes('/')) {
+    if (ip.includes(':')) return false;
+
     const [subnet, prefixStr] = range.split('/');
     const prefix = parseInt(prefixStr, 10);
     if (!Number.isFinite(prefix) || prefix < 0 || prefix > 32) return false;
@@ -90,23 +88,28 @@ export function matchesAnyIPRange(ip: string, ranges: string[]): boolean {
 
 /**
  * Extract IP address from client address string
- * Handles IPv6 addresses and port numbers
+ * Handles bracketed IPv6 with port, IPv4 with port, zone IDs and IPv4-mapped IPv6
  */
 export function extractIP(clientAddr: string): string {
   if (!clientAddr) return '';
-  
-  // Handle IPv6 addresses
-  if (clientAddr.includes('[')) {
-    const match = clientAddr.match(/\[([^\]]+)\]/);
-    return match ? match[1] : clientAddr;
-  }
-  
-  // Remove port for IPv4
-  const lastColonIndex = clientAddr.lastIndexOf(':');
-  if (lastColonIndex > 0 && !clientAddr.includes('::')) {
-    return clientAddr.substring(0, lastColonIndex);
-  }
-  
-  return clientAddr;
-}
 
+  let ip = clientAddr.trim();
+  const firstColon = ip.indexOf(':');
+
+  // "[v6]:port" or "[v6]"
+  if (ip.startsWith('[')) {
+    const end = ip.indexOf(']');
+    if (end !== -1) ip = ip.substring(1, end);
+  } else if (firstColon !== -1 && firstColon === ip.lastIndexOf(':')) {
+    // Exactly one colon: IPv4 with port
+    return ip.substring(0, firstColon);
+  }
+
+  // Two or more colons: IPv6, keep as is apart from the zone ID
+  const zoneIndex = ip.indexOf('%');
+  if (zoneIndex !== -1) ip = ip.substring(0, zoneIndex);
+
+  // IPv4-mapped IPv6
+  const mapped = ip.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
+  return mapped ? mapped[1] : ip;
+}

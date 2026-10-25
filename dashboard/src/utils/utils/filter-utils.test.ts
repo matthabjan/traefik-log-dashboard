@@ -87,3 +87,18 @@ describe('internal noise filtering', () => {
     expect(summary).toContain('Internal traffic excluded');
   });
 });
+
+describe('IPv6 client filtering', () => {
+  it('excludes private IPv6 clients and keeps public ones when excludePrivateIPs is enabled', () => {
+    const settings = { ...defaultFilterSettings, excludePrivateIPs: true };
+    const publicIP = '2a01:599:90e:d9b4:6c10:784f:761:62c9';
+    const logs = [
+      makeLog({ ClientHost: 'fd12::5', ClientAddr: '[fd12::5]:443' }),
+      makeLog({ ClientHost: publicIP, ClientAddr: `[${publicIP}]:443` }),
+    ];
+
+    const filtered = applyFilters(logs, settings, noiseRules);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].ClientHost).toBe(publicIP);
+  });
+});
