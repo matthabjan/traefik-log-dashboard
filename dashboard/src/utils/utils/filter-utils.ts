@@ -2,7 +2,7 @@
 
 import { TraefikLog } from '../types';
 import { FilterSettings, FilterCondition } from '../types/filter';
-import { isPrivateIP, matchesAnyIPRange } from './ip-utils';
+import { extractIP, isPrivateIP, matchesAnyIPRange } from './ip-utils';
 
 export interface InternalNoiseRules {
   pathPrefixes: string[];
@@ -32,12 +32,8 @@ export function isInternalNoiseLog(log: TraefikLog, rules: InternalNoiseRules): 
  * Extract real IP from headers based on proxy settings
  */
 function getRealIP(log: TraefikLog, settings: FilterSettings): string {
-  let ip = log.ClientHost || log.ClientAddr || '';
-
   // Strip port if present
-  if (ip.includes(':')) {
-    ip = ip.split(':')[0];
-  }
+  const ip = extractIP(log.ClientHost || log.ClientAddr || '');
 
   // Check proxy headers in order of precedence
   if (settings.proxySettings.enableCFHeaders) {
@@ -80,17 +76,15 @@ function replaceClientIP(log: TraefikLog, settings: FilterSettings): TraefikLog 
   
   // Only replace if we found a different IP from headers
   const currentAddr = log.ClientAddr || '';
-  const currentIPClean = currentAddr.includes(':') ? currentAddr.split(':')[0] : currentAddr;
+  const currentIPClean = extractIP(currentAddr);
   
   if (realIP && realIP !== currentIPClean) {
     // Extract port from original ClientAddr if present
-    let port = '';
-    if (currentAddr.includes(':')) {
-      const parts = currentAddr.split(':');
-      port = parts[parts.length - 1]; // Get last part (port)
-    }
+    const portMatch = currentAddr !== currentIPClean ? currentAddr.match(/:(\d+)$/) : null;
+    const port = portMatch ? portMatch[1] : '';
     
-    const newClientAddr = port ? `${realIP}:${port}` : realIP;
+    const host = realIP.includes(':') ? `[${realIP}]` : realIP;
+    const newClientAddr = port ? `${host}:${port}` : realIP;
     
     return {
       ...log,
